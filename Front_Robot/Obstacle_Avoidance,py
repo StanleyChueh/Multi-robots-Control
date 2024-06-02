@@ -1,0 +1,49 @@
+import rclpy
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+
+def callback(msg, cmd_vel_pub, forward_active):
+    s1_distance = msg.ranges[0]
+    s2_distance = msg.ranges[45]
+    s4_distance = msg.ranges[315]
+
+    twist = Twist()
+
+    if s1_distance >= 0.4:
+        forward_active = True
+        twist.linear.x = 0.1  # Move forward
+    elif 0 < s1_distance < 0.4:
+        twist.linear.x = 0.0
+        twist.angular.z = 0.2  # Rotate to avoid obstacle
+        forward_active = False
+    elif s1_distance == 0 and s2_distance == 0:
+        twist.angular.z = -0.2  # Rotate to search for a clear path
+
+    if 0 < s2_distance <= 0.4 or 0 < s4_distance <= 0.4:
+        twist.linear.x = 0.0
+        twist.angular.z = 0.2  # Rotate to avoid obstacle
+
+    cmd_vel_pub.publish(twist)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = rclpy.create_node('laser_data')
+    cmd_vel_pub = node.create_publisher(Twist, '/tb3_0/cmd_vel', 10)
+    forward_active = False  # Flag to track forward motion state
+
+    def laser_callback(msg):
+        nonlocal forward_active
+        callback(msg, cmd_vel_pub, forward_active)
+
+    node.create_subscription(
+        LaserScan,
+        '/tb3_0/scan',
+        laser_callback,
+        qos_profile=rclpy.qos.qos_profile_sensor_data
+    )
+
+    rclpy.spin(node)
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
